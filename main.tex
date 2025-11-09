@@ -13,7 +13,20 @@
 \usepackage{listings}
 \usepackage{xcolor}
 \usepackage{caption}
+\usepackage{setspace}
+\usepackage{lmodern}
+\usepackage{float}
 
+\onehalfspacing
+
+% Math and theorem environments (numbered by section)
+\usepackage{amsmath, amssymb, amsthm}
+\numberwithin{equation}{section}
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{example}[theorem]{Example}
 \hypersetup{
   colorlinks=true,
   linkcolor=blue!60!black,
@@ -32,14 +45,39 @@
   columns=fullflexible
 }
 
+% Author–year citations (JLC-friendly)
+% \usepackage[round,authoryear]{natbib}
+\usepackage[numbers,sort&compress]{natbib}
+% \bibliographystyle{plainnat}
+
+% Simple anonymization toggle (no structural impact)
+\newif\ifjlcAnon
+\jlcAnonfalse           % set to \jlcAnonfalse for camera-ready
+
+
 \title{Epistemic State Updates in LLM Agents via Public Announcement and Graded Modal Logic}
-\author{Justin Mullins, John Symons}
-\date{\today}
+% to anonymize without changing section structure.
+\ifjlcAnon
+  % For submission:
+  \author{Anonymous Submission}
+  \date{}
+\else
+  % For camera-ready (fill in later):
+  \author{Justin Mullins\thanks{Johns Hopkins University, Whiting School of Engineering} \and John Symons\thanks{University of Kansas, Center for Cyber Social Dynamics}}
+  \date{\today}
+\fi
 
 \begin{document}
 
 \maketitle
-\tableofcontents
+
+\begin{abstract}
+Large Language Model (LLM) agents reason and act in dynamic environments but often lack an explicit account of what they know or believe at each step. This paper introduces a lightweight epistemic state management framework grounded in Public Announcement Logic (PAL) and graded modal logic. We treat observations, tool results, and internal inferences as \emph{announcements} that transform an agent’s knowledge state. Each announcement updates a minimal log $\Sigma$ that serves as a filter on the agent’s possible worlds, maintaining consistency while avoiding full model enumeration. We extend PAL with graded belief operators to represent uncertainty and show how these can model belief revision and bounded rationality. Our framework enables explicit, inspectable reasoning in LLM agents, improving self-consistency, interpretability, and epistemic awareness. We conclude with implementation sketches and evaluation plans for benchmarking epistemic reasoning in LLM agents.
+\end{abstract}
+
+\noindent\textbf{Keywords:} dynamic epistemic logic, public announcement logic, graded belief, belief revision, LLM agents, epistemic reasoning
+
+% ===============================================================================================
 
 \input{sections/01-introduction}
 \input{sections/02-background-epistemic-logic-and-public-announcements}
@@ -48,7 +86,7 @@
 \input{sections/05-discussion}
 \input{sections/06-conclusion}
 
-\bibliographystyle{plain}
+\bibliographystyle{unsrt}
 \bibliography{references}
 
 \end{document}
