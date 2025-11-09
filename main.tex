@@ -1,0 +1,54 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,shapes.geometric}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{caption}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!60!black,
+  citecolor=blue!60!black,
+  urlcolor=blue!60!black
+}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{blue!60!black},
+  commentstyle=\color{green!40!black},
+  stringstyle=\color{orange!70!black},
+  showstringspaces=false,
+  frame=single,
+  breaklines=true,
+  columns=fullflexible
+}
+
+\title{Epistemic State Updates in LLM Agents via Public Announcement and Graded Modal Logic}
+\author{Justin Mullins, John Symons}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\input{sections/01-introduction}
+\input{sections/02-background-epistemic-logic-and-public-announcements}
+\input{sections/03-framework-design-epistemic-workflows-for-llm-agents}
+\input{sections/04-implementation-considerations}
+\input{sections/05-discussion}
+\input{sections/06-conclusion}
+
+\bibliographystyle{plain}
+\bibliography{references}
+
+\end{document}

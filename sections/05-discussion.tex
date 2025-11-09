@@ -1,0 +1,64 @@
+% Auto-generated from DOCX
+\section{Discussion}
+The proposed framework brings together ideas from logic and the practical demands of LLM agent systems. Here, we reflect on the implications, compare with other approaches, and highlight challenges and future directions.
+
+\subsection{Comparison with Related Approaches}
+Classical AI Planning and BDI: Our method has echoes of classical knowledge-based planning and the BDI model. In knowledge-based planning, one explicitly represents the agent's beliefs and plans sensing actions to reduce uncertainty\cite{dynamic-term-modal}. Those approaches often required specialized planners or model checkers due to the complexity of epistemic reasoning. In contrast, we leverage the LLM's flexibility and only maintain a lightweight state. BDI architectures represent beliefs as a database, which is very similar to our $\Sigma$. The difference is that BDI usually doesn't formalize how the belief base is updated by perception in logical terms, and it's more an architectural concept. We add the PAL semantic flavor to it, making it clear that perceptions act like announcements that prune the belief base. Another difference: BDI often allows inconsistent beliefs (the agent can have beliefs that are wrong, until corrected), whereas we try to keep $\Sigma$ factually consistent with the environment (if our announcements are truthful).
+
+Neuro-Symbolic and Knowledge Graph Augmented LLMs: There's a growing trend to combine neural and symbolic reasoning. One example is LLMs using a knowledge graph to get factual information and even to do logic queries. In our framework, the knowledge log $\Sigma$ could be seen as a tiny, dynamically built knowledge graph (just a set of triples or propositions). The difference from static knowledge graphs is that $\Sigma$ is highly context-specific and is built on the fly, rather than querying a huge static graph of world knowledge. Projects like KGA2 (Knowledge Graph-Augmented Agents) often focus on retrieving from a fixed knowledge base like Wikipedia, whereas we focus on logically updating a working knowledge set that pertains to the current problem.
+
+Chain-of-Thought and Self-Reflection: LLMs with chain-of-thought (CoT) prompting do have some capacity to simulate belief updates by enumerating what they deduce step by step. Techniques like Scratchpad let the model write down intermediate results. One could argue that if an LLM were sufficiently advanced, it could internally simulate our entire framework without explicit structure. Possibly true, but current models show flaws in long or complex reasoning unless guided. By imposing structure, we reduce the cognitive load on the model, so it doesn't have to juggle all facts in pure text; we assist it by keeping a structured memory. Moreover, our approach is more transparent. It provides a trace (the $\Sigma$ log) that can be inspected or audited by humans or debugging tools. This is important for aligning AI behavior: one can see exactly ``why'' the agent thinks X (because fact Y is in $\Sigma$).
+
+Approaches like Reflexion by Shinn et al. involve the model generating critiques of its answers and improving over iterations. That is orthogonal but complementary. One could incorporate a reflection step where after completing a task (or at certain milestones) the agent reviews $\Sigma$ for any contradictions or missed opportunities (like ``I still don't know X, should have asked that.''). The framework provides a scaffold for such meta reasoning, because $\Sigma$ is a concise summary of knowledge, it's easier to review than raw dialogue.
+
+Memory Networks and Long Conversation Handling: Some research addresses long-term consistency by fine-tuning models to refer back to earlier conversation or use a separate memory module. Those often remain neural (vector-based retrieval). Our approach could easily incorporate vector search to fetch relevant past facts into $\Sigma$ if the agent has a long history. For instance, if the agent handled a user's device setup last month, and now the user returns with an issue, a memory system might surface ``User has model X router, set up last month.'' That can be put into $\Sigma$ as prior knowledge. So, this doesn't replace vector memory; it works with it. The key is the retrieved memory is then treated logically: if it says ``the router password is ABC'', then $\Sigma$ will ensure the agent doesn't act as if it's unknown.
+
+\subsection{Benefits and Limitations}
+\paragraph{Benefits.}
+\begin{itemize}
+  \item \textbf{Consistency.} An explicit record drastically reduces contradictory or repetitive actions, a common failure mode for LLM agents.
+  \item \textbf{Interpretability.} The knowledge log exposes the provenance of each conclusion, easing debugging and human oversight.
+  \item \textbf{Goal-driven information gathering.} By recognising unknowns, the agent proactively seeks announcements to close gaps, improving task efficiency\cite{reflection-bench}.
+  \item \textbf{Modularity.} The epistemic layer wraps around the LLM and can be paired with different backends or deployment contexts without major changes.
+\end{itemize}
+
+\paragraph{Limitations.}
+\begin{itemize}
+  \item \textbf{Bootstrapping assumptions.} Incorrect initial facts can persist in $\Sigma$ until explicitly revised, so the agent needs mechanisms for correction.
+  \item \textbf{Incomplete reasoning.} Without full logical closure, simple entailments might be missed unless assisted by lightweight inference add-ons.
+  \item \textbf{Operational overhead.} Managing the prompt and knowledge base adds cost, though it is justified on tasks that demand consistency.
+  \item \textbf{Model compliance.} The LLM must respect authoritative facts; guard rails such as post-generation checks help when hallucinations occur.
+  \item \textbf{Multi-agent complexity.} Extending the framework to shared or divergent knowledge states across agents requires additional bookkeeping beyond the current scope.
+\end{itemize}
+
+\subsection{Open Challenges}
+Several open research questions arise from this work:
+\begin{enumerate}[leftmargin=*]
+  \item \textbf{Learning structured knowledge outputs.} Can models be trained to emit machine-readable KNOW statements, reducing the need for bespoke parsers?
+  \item \textbf{Robustness to misinformation.} What belief-revision strategies help resolve conflicts between trusted sources, and how can LLMs assist in diagnosing the culprit\cite{del-sep}?
+  \item \textbf{Resource-aware prompting.} How do we keep prompts compact, perhaps by querying $\Sigma$ on demand or caching filtered summaries instead of replaying the full log each turn?
+  \item \textbf{Evaluation metrics.} Purpose-built benchmarks (e.g. Reflection-Bench\cite{reflection-bench}) should measure contradictions avoided, redundant actions, or success rates on epistemic puzzles.
+  \item \textbf{Human-agent common ground.} Extending the framework to reason about the user's knowledge could support richer dialogue strategies and aligns with prior discourse modelling. %Need citation
+
+\end{enumerate}
+
+\subsection{Toward Structured Cognition in LLMs}
+One way to view our framework is as a step towards structured cognition or a form of System II reasoning layered on top of the LLM's System I fluency. The LLM provides the intuition, language fluency, and associative knowledge; the logic layer provides structuring, memory, and consistency. This combination is reminiscent of dual-process theory in cognitive science, where logical reasoning can override automatic impulses when needed.
+
+We believe this kind of architecture will become increasingly important as LLM agents tackle more complex, multi-step problems. The alternative is to try to train end-to-end LLMs to handle everything internally, but that may require orders of magnitude more parameters or data, and even then interpretability would suffer. By explicitly structuring part of the problem (state management), we guide the model and reduce the search space it has to navigate.
+
+This framework is also model-agnostic: it could work with GPT-4, or an open-source Llama, etc. If an LLM improves in reliability, the logic layer doesn't hinder it; it only steps in to enforce consistency. In fact, a stronger LLM might make even better use of $\Sigma$, drawing more subtle inferences. A weaker LLM might need more explicit inference rules coded (like we might have to manually implement transitivity or other reasoning it fails at).
+
+Generality: While our examples have been in text-based domains, the concept applies to any agent that uses an LLM for planning or decision. For instance, a robot with an LLM-based planner could maintain a knowledge state about its environment (objects seen, locations clear, etc.). The announcements are then sensor readings or map updates, and $\Sigma$ ensures it doesn't, say, attempt to walk through a region it knows is blocked. Traditional robotics already has SLAM (simultaneous localization and mapping), which is essentially building a knowledge state (a map). Our contribution is more relevant in abstract or informational environments where the ``map'' is not spatial but logical (like puzzle states, dialogue facts, etc.).
+
+\subsection{Future Work}
+Advanced Logic Integration: We can consider integrating more advanced dynamic epistemic logic constructs like action models. Public announcements are one type of epistemic action, but there are others like private announcements (where only one agent hears something), or deceptive announcements. In multi-agent systems, one could model communication by one agent as an announcement that updates others but not the sender's own knowledge (or the sender already knew it). Implementing such things might be needed for, say, two LLM agents cooperating or negotiating.
+
+Automated Knowledge Extraction: Using LLMs themselves to extract facts from unstructured content (like long documents) into $\Sigma$ would be useful. Many LLM agents already do some form of summarization or extraction when using tools (e.g., browsing a webpage and noting key points). If we align that with our epistemic approach, the agent could explicitly say, ``From the document, I learned: Fact1, Fact2.'' Those go into $\Sigma$. If done well, this could vastly improve the agent's ability to handle long inputs by distilling them into a knowledge base it can reason with, instead of juggling long text in context.
+
+Dynamic Prioritization: Not all facts in $\Sigma$ are equally important at all times. Perhaps a mechanism to mark some as core vs peripheral would help. If the context window is limited, maybe only feed core ones unless needed. This is similar to how humans keep salient facts in mind and others in the background.
+
+Incorporating Learning: Over repeated tasks, the agent could learn which epistemic strategies work best. Perhaps it might refine a policy like ``always clarify unknown goal parameters early.'' Our framework makes such strategies more viable because the agent can detect unknowns easily. An interesting direction is letting the agent simulate possible outcomes based on current $\Sigma$. It could imagine, ``If I continue with this plan and my unknown X turns out to be true, what then? If false, what then?'' This is essentially contingent planning. The logic layer could spawn hypothetical branches for each case of X, and the LLM could plan in each branch. While computationally heavy, for small numbers of key unknowns it might be doable. This would lead to very robust decision-making (covering all cases), but guiding an LLM to do that systematically is a research challenge.
+
+In conclusion, our approach is a step toward marrying the strengths of LLMs (flexible reasoning, knowledge, language use) with the rigor of logical state tracking. It provides a blueprint for building AI agents that can know what they know (and don't know) in a principled way. This not only improves performance on many tasks but is also essential for safety, because an agent that is aware of its knowledge limits can avoid overconfidently giving wrong answers or taking dangerous actions.
+

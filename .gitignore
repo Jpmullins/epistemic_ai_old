@@ -1,0 +1,41 @@
+# LaTeX build artefacts
+*.aux
+*.bbl
+*.bcf
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.run.xml
+*.synctex.gz
+*.toc
+*.lof
+*.lot
+*.lol
+*.nav
+*.snm
+*.vrb
+
+# latexmk intermediates
+*.pdfsync
+*.synctex
+
+# Temporary editor files
+*~
+*.swp
+*.swo
+
+# Python cache/virtualenv
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+
+# macOS
+.DS_Store
+
+# VS Code
+.vscode/
+
+AGENTS.md

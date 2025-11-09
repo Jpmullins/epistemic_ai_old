@@ -1,0 +1,25 @@
+\begin{figure}[ht]
+  \centering
+  \begin{tikzpicture}[
+      >=Latex,
+      node distance=1.5cm,
+      process/.style={draw, rounded corners, minimum height=0.9cm, text width=3.4cm, align=center, font=\footnotesize\sffamily},
+      io/.style={draw, trapezium, trapezium stretches=true, trapezium left angle=70, trapezium right angle=110, minimum height=0.9cm, text width=3.4cm, align=center, font=\footnotesize\sffamily}
+    ]
+    \node[io] (observe) {Observation / Tool Result};
+    \node[process, below=of observe] (parse) {Parse announcement $\psi$ and normalise content};
+    \node[process, below=of parse] (filter) {Filter candidate worlds using $\psi$};
+    \node[process, below=of filter] (log) {Update knowledge base $\Sigma \leftarrow \Sigma \cup \{\psi\}$};
+    \node[process, below=of log] (decide) {Select next action using updated $\Sigma$};
+    \node[process, below=of decide] (act) {Execute action in environment};
+
+    \draw[->] (observe) -- (parse);
+    \draw[->] (parse) -- (filter);
+    \draw[->] (filter) -- (log);
+    \draw[->] (log) -- (decide);
+    \draw[->] (decide) -- (act);
+    \draw[->] (act.west) .. controls +(-2.2,0.4) and +(-2.2,-0.4) .. node[left=2pt, align=center, font=\footnotesize\sffamily]{New observation\\or tool feedback} (observe.west);
+  \end{tikzpicture}
+  \caption{Epistemic update loop. Each observation is parsed into an announcement $\psi$, incorporated into the knowledge base $\Sigma$, and used to drive the agent's next action.}
+  \label{fig:knowledge-flow}
+\end{figure}

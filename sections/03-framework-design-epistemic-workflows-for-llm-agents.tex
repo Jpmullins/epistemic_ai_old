@@ -1,0 +1,137 @@
+% Auto-generated from DOCX
+\section{Framework Design: Epistemic Workflows for LLM Agents}
+In this section, we present the design of our epistemic state management framework for LLM-based agents. The framework can be viewed as a protocol layer that operates between the agent's cognition (LLM-driven reasoning and language generation) and its environment interactions. This layer maintains a representation of the agent's knowledge/belief state and provides two primary operations:
+\begin{enumerate}
+  \item \texttt{update(state, announcement)}: Incorporate a new piece of information (announcement) into the agent's state, modifying the state (usually by adding a constraint or fact) and possibly triggering internal consequences.
+  \item \texttt{query(state, formula)}: Allow the agent or an external evaluator to inspect what is known or believed in the current state (e.g. check if a certain proposition is entailed by the knowledge log).
+\end{enumerate}
+
+We first describe the choice of knowledge representation, then the update mechanism (inspired by PAL), and then how this ties into the agent's decision-making (action selection and planning). An illustrative example is provided to tie everything together.
+
+\subsection{Minimal State Representation as Epistemic Filter}
+The agent's epistemic state $\Sigma$ at any time is represented in a minimal, declarative form. We can think of $\Sigma$ as essentially a list (conjunction) of formulas that the agent currently takes to be true (announcements it has received or assumed). Initially, $\Sigma$ may contain the agent's prior knowledge or assumptions about the world. For instance, if the agent starts a task knowing some background facts, those would be in $\Sigma_0$. If the agent has no specific knowledge apart from logical axioms, $\Sigma_0$ might be just tautologies or even empty (meaning all worlds are possible initially).
+
+As the agent proceeds, $\Sigma$ is updated. There are design choices for how to implement $\Sigma$:
+\begin{itemize}
+  \item \textbf{Explicit list of propositions.} Treat $\Sigma$ as $\{\varphi_1, \varphi_2, \ldots, \varphi_n\}$, ensuring the set remains consistent when new announcements arrive. Inconsistencies can be handled by rejecting or revising facts.
+  \item \textbf{Single conjunctive formula.} Maintain $\Sigma$ as the conjunction of all known facts, which is useful when interfacing with solvers or prompting the LLM with a compact summary.
+  \item \textbf{Structured state.} Encode $\Sigma$ as a graph or database when the domain has rich structure. For many LLM tasks, however, an unstructured fact list is sufficient.
+\end{itemize}
+
+We opt for a simple model: treat $\Sigma$ as a set of facts the agent believes to be true. Initially, $\Sigma_0$ might be empty or contain basic context. For example, if the agent is solving a puzzle, $\Sigma_0$ could list the puzzle's givens. If multiple agents were involved, each would have their own $\Sigma_i$, but here we focus on one agent.
+
+Now, how does $\Sigma$ relate to possible worlds? $\Sigma$ implicitly defines the set of worlds $W_{\Sigma} = \{ w \mid w \models \bigwedge_{\varphi \in \Sigma} \}$. That is, the worlds consistent with all facts in $\Sigma$. If the agent's reasoning was logically perfect, the agent would consider exactly those worlds possible. In reality, the agent might not deduce all consequences, so it might implicitly consider some worlds possible that actually violate some logical consequence of $\Sigma$ (logical omniscience failure). We accept that discrepancy, because enforcing complete closure under logic is computationally infeasible. However, the basic facts in $\Sigma$ themselves are assumed to be tracked and enforced.
+
+In essence, $\Sigma$ plays the role of an ``epistemic filter''\cite{espf}. Each fact in $\Sigma$ filters out all worlds where that fact is false\cite{del-sep}. The more facts accumulated, the smaller (more refined) the set of possible worlds the agent entertains. This concept is analogous to the Epistemic Support Filter in state estimation which maintains a region of plausibility that shrinks with each new observation\cite{espf}. Here, instead of a region in a continuous state space, we have a region in a discrete possibility space of propositions.
+
+One might worry that storing all facts could become unwieldy (what if the agent collects hundreds of facts?). In practice, two mitigations exist:
+\begin{itemize}
+  \item \textbf{Relevance filtering.} Retain only task-critical announcements. Irrelevant observations can be ignored or parked in an auxiliary memory.
+  \item \textbf{Summarization and abstraction.} Periodically compress $\Sigma$ by synthesizing higher-level statements that subsume redundant facts, akin to belief contraction in logic.
+\end{itemize}
+
+Given the nature of LLMs, one implementation is to store $\Sigma$ as a section of the prompt or a separate memory that the LLM can access (for instance, via a vector store + retrieval). Another approach is to maintain $\Sigma$ outside the LLM and only inject relevant parts into the prompt when needed. This intersects with the retrieval-augmented generation paradigm, where the knowledge base $\Sigma$ is maintained and the model is fed relevant entries.
+
+\subsection{Belief and Knowledge Update via Announcements}
+The core dynamic operation is updating $\Sigma$ when a new piece of information arrives. We formalize this as follows: an announcement is a formula (or proposition) $\psi$ that becomes public to the agent. In a single-agent setting, this just means the agent becomes aware of $\psi$ and (in the case of knowledge update) accepts it as true. This could be because the agent directly observed $\psi$, a tool returned $\psi$, or another agent told it $\psi$. Under the assumption that $\psi$ is trustworthy (for now), the rational response is to upgrade the agent's knowledge to include $\psi$. In PAL terms, the model transforms from $M$ to $M[\psi!]$, and the agent's knowledge now entails $\psi$.
+
+In our implementation, an update is simple: $\Sigma := \Sigma \cup \{\psi\}$, provided $\Sigma \cup \{\psi\}$ is consistent. If adding $\psi$ would make $\Sigma$ logically inconsistent, it means something has gone wrong (e.g. $\psi$ contradicts a previous knowledge). The framework could handle that in a few ways:
+\begin{itemize}
+  \item \textbf{Belief revision.} Remove or weaken conflicting entries, prioritising sources deemed more reliable (AGM-style revision).
+  \item \textbf{Reject the announcement.} When prior knowledge is trusted more than the new evidence, treat $\psi$ as noise and request clarification.
+  \item \textbf{Flag uncertainty.} Record the contradiction for human or automated follow-up instead of forcing an inconsistent state.
+\end{itemize}
+
+For simplicity, we can assume such conflicts are rare in a well-defined task (or we design the agent to ask for clarification if a contradiction arises).
+
+Thus, in normal operation, each new announcement just appends to $\Sigma$. This is indeed how a log of tool calls or observations works: you keep appending new entries (facts learned). Over time, $\Sigma$ grows monotonically. This monotonic increase of knowledge corresponds to the assumption that all announcements are true and no misinformation is given. In the presence of misinformation or mistakes, one would need a non-monotonic step (removing or marking a belief as retracted), which again is an advanced topic beyond PAL (PAL itself is monotonic in that once something is announced as true, it stays known).
+
+Let's illustrate an update sequence in a toy workflow:
+\begin{enumerate}
+  \item $\Sigma_0 = {}$ (agent knows nothing specific).
+  \item The user asks: ``Is the treasure in room A or room B?'' capturing the disjunction $\text{Treasure in A} \vee \text{Treasure in B}$.
+  \item A tool query returns ``The treasure is in room B,'' yielding announcement $\psi := \text{Treasure is in B}$ and the update $\Sigma := \Sigma \cup \{\text{Treasure in B}\}$.
+  \item The agent responds confidently with the updated knowledge. A later contradiction (``It moved to A'') would trigger the revision workflow above.
+\end{enumerate}
+
+This example is straightforward because the tool gave a direct answer. Often, announcements are less direct. For instance, the agent might deduce something by itself. Imagine an LLM agent planning a route: it knows roads X and Y connect certain towns, and it deduces a route exists. The deduction of an intermediate conclusion can be treated as an ``internal announcement'' to itself: once it confidently infers a sub-goal is achieved or a sub-fact is established, it can add that to $\Sigma$. In practice, one might have the LLM chain-of-thought generate a statement like ``Therefore, I now know that location Z is reachable.'' The system could detect a phrase like ``I now know that \_\_\_'' and treat it as an assertion to add to the knowledge store (subject to verification possibly).
+
+It's worth comparing this with how typical chain-of-thought (CoT) prompting works. In CoT, the model generates intermediate reasoning steps in plain text. These often include assertions of facts that the model believes for the sake of reasoning. However, nothing enforces that those facts persist or are used later. By integrating a state, whenever the model (or environment) produces a sentence of the form ``(Fact): ...'' or something designated as a fact, the system can capture it in a structured form and make it persist into subsequent prompts as needed. Essentially, the knowledge log $\Sigma$ can be appended to the next prompt, or the model can be reminded ``You know: [list of facts]''.
+
+This highlights a design consideration: How do we ensure the LLM's own generation stays consistent with $\Sigma$? We have to integrate $\Sigma$ into the LLM's context. The simplest method is to prepend a formatted summary of $\Sigma$ at each query, e.g. ``Facts: (1) X. (2) Y. (3) If Z then W.'' Many agent implementations already do something like this (they might prepend tool results or previous answers to keep context). The difference here is we might format it in a logic-oriented way or include tags like ``Known:'' to signal these are established truths. If the LLM tends to follow instructions, it should refrain from contradicting these provided facts.
+
+Now, consider partial observability and knowledge-seeking actions: The agent may realize at some point that it does not know a needed piece of information. In epistemic logic, we can express this as $
+\neg K \varphi$ (not known whether $\varphi$). In our framework, how do we represent unknowns? We typically represent what is known, not explicitly what is unknown. However, the agent can infer something is unknown to it if neither $\varphi$ nor $
+\neg \varphi$ is entailed by $\Sigma$. In classical epistemic logic, one might include formulas expressing ignorance, but we don't need to explicitly store ``I don't know X'' unless the agent needs to communicate it. Instead, the agent's decision-making procedure can query $\Sigma$: ``is $\varphi$ or its negation in $\Sigma$ (or follows from $\Sigma$)?'' If not, then $\varphi$ is currently unknown, which might trigger an information-gathering action.
+
+For instance, a planning rule could be: if goal requires condition C and $\Sigma 
+\not\models C$, then plan an action to obtain C. This is essentially epistemic planning logic: you formulate a subgoal ``know C''. Under the hood, our framework handles the update when that knowledge is obtained.
+
+\subsection{Guiding Action Selection and Belief Revision}
+With an explicit knowledge state in place, the LLM agent can make more informed and rational decisions. This addresses situations where a naive LLM might act without realizing it lacks crucial information. Key control points include:
+\begin{itemize}
+  \item \textbf{Precondition checking.} Ensure prerequisites (e.g. possessing a key) are present in $\Sigma$ before executing costly actions.
+  \item \textbf{Avoiding repetition.} Skip redundant tool calls when $\Sigma$ already contains the required fact or answer.
+  \item \textbf{Belief-driven branching.} Branch plans on whether facts such as user preferences are recorded, prompting for missing information when needed.
+\end{itemize}
+
+A subtle but powerful effect is belief revision through reflection. Suppose the agent made a wrong assumption early on, and later an announcement contradicts it. The framework as described doesn't automatically resolve that beyond flagging inconsistency. But an LLM with the protocol can be prompted to handle it: if contradiction is detected (e.g. both $\varphi$ and $
+\neg\varphi$ ended up in $\Sigma$), the agent can be instructed to analyze which one to retract. This becomes an explicit metacognitive step: the agent might say ``I see an inconsistency between my earlier assumption and new information. I will revoke my earlier assumption.'' In an experiment by Shinn et al. (2023) called Reflective decoding, LLMs were prompted to find mistakes in their own reasoning and correct them. Our system could formalize that: at checkpoints, run a consistency check on $\Sigma$. If inconsistent, ask the LLM (or use an automated method) to diagnose. Because $\Sigma$ is much smaller and structured than the entire conversation, diagnosing conflicts is easier (it could be as simple as scanning for a proposition and its negation).
+
+Diagrams and Tables: To illustrate the above, consider Table~\ref{tab:treasure-updates}, which outlines a hypothetical sequence for an LLM agent solving a mini task with epistemic updates.
+\begin{table}[ht]
+  \centering
+  \caption{Epistemic updates for a toy treasure-hunt task. Step~5 surfaces an inconsistency that triggers belief revision.}
+  \label{tab:treasure-updates}
+  \footnotesize
+  \begin{tabularx}{\textwidth}{@{}p{0.08\textwidth}p{0.26\textwidth}p{0.30\textwidth}X@{}}
+    \toprule
+    Step & Action / Observation & Announcement $\psi$ & Knowledge state $\Sigma$ \\
+    \midrule
+    0 & Initial state & \text{(none)} & $\Sigma = \varnothing$ (no task-specific knowledge). \\
+    1 & User asks: ``Find the treasure location.'' & Assume treasure $\in \{A,B\}$. & Records the domain constraint $\text{Treasure}\in \{A,B\}$. \\
+    2 & Tool call: \texttt{ask\_map()} & ``Treasure is in B.'' & Appends fact $\text{Treasure in B}$ alongside the prior constraint. \\
+    3 & Internal deduction & ``Treasure is not in A.'' & Adds derived negation $\neg(\text{Treasure in A})$ to maintain consistency. \\
+    4 & Respond to user & \text{(none)} & State unchanged while replying. \\
+    5 & User corrects location & ``Treasure is in A.'' & Detects conflict with stored $\neg(\text{Treasure in A})$; invoke revision protocol. \\
+    \bottomrule
+  \end{tabularx}
+\end{table}
+
+In the above table, at step 2 the agent receives a factual announcement from a tool and updates its state. By step 3, it also infers the complementary fact (though it could be left implicit too). At step 5, a new announcement contradicts the earlier info; an epistemic framework can catch this and force a resolution (perhaps the environment changed, so the agent should drop the old fact and accept the new one, treating it as a different time context).
+
+The framework's operation can also be visualised by the pipeline in Figure~\ref{fig:knowledge-flow}, where each announcement filters the admissible worlds for the agent's next decision.
+
+\input{figures/knowledge-update-flow.tex}
+
+The cycle repeats while the agent interacts with the environment; query actions simply feed another announcement into the update stage until the task completes. Notably, this is similar to a POMDP belief update loop or a filtering loop in state estimation, as noted earlier. In those domains, after each sensor reading, the belief (a probability distribution or set of possible states) is updated. Here, $\Sigma$ is like a symbolic belief state being updated.
+
+One might question: does this approach handle all kinds of knowledge an LLM might need? LLMs have a vast implicit world knowledge (from pre-training) that we are not explicitly enumerating in $\Sigma$. That's fine because $\Sigma$ is not meant to encode everything the model knows about the world, just the specific situation-specific knowledge. The model's background knowledge (like ``Paris is the capital of France'') is assumed to be available in its parameters. We only track things that are contingent on the current instance or that result from the current interaction. If needed, an LLM can always draw on its background knowledge; if it's important to the task, we may even represent a piece of it in $\Sigma$ for clarity (e.g., if the task is about geography, we might populate $\Sigma$ initially with relevant geographic facts retrieved from a knowledge base).
+
+\subsection{Example: Tool-using LLM Agent with Epistemic Updates}
+To ground the framework, let's walk through a more detailed scenario with a large language model agent that has to solve a problem by interacting with tools, and see how the epistemic state evolves. We'll include how the agent's prompts might look and how the system ensures consistency.
+
+Scenario: The agent is an LLM assistant helping a user troubleshoot a network issue. The user says their internet is not working. The agent can use tools like ping\_test(host) which returns reachable or not, and dns\_lookup(domain) which returns an IP or failure.
+
+Step 0: Initial knowledge $\Sigma_0$ might contain some generic assumptions or not. Let's say $\Sigma_0 = {}$ for simplicity.
+
+Step 1 (User input): ``My internet is down. I cannot reach example.com.'' The agent parses this. It might interpret that as information: user cannot reach example.com. It could translate that to a fact like $\neg \text{Reachable}_{\text{user}}(\text{example.com})$. Suppose the agent does that. So it treats this as an announcement $\psi_1$: ``example.com not reachable from user's computer.'' Update: $\Sigma_1 = {
+\neg \text{Reachable}_{\text{user}}(\text{example.com})}$.
+
+Step 2 (Agent reasoning): The agent wants to diagnose. Possible issues: DNS problem or connectivity problem. It doesn't know the cause. It decides to use a tool: ping\_test(example.com). The tool returns: ``ping successful'' or perhaps ``host not found.'' Let's say the tool returns: ``ping: host not found.'' That is an announcement $\psi_2$: ``example.com DNS resolution failed.'' Now, this is new information. Update $\Sigma_2 = {
+\neg \text{Reachable}_{\text{user}}(\text{example.com}), \; \text{DNSFail}(\text{example.com})}$.
+
+From this, the agent might deduce: if DNS failed, it suggests a DNS issue. It knows (from its general knowledge, not explicitly in $\Sigma$ but background) that if DNS is failing, internet might actually be up but name resolution is the issue. So it now plans actions accordingly (maybe instruct user to check DNS settings). But to be sure, it could try another site by IP. However, let's say it deduces: internet is working but DNS is faulty. It might assert internally $\psi_3$: ``Connection is okay, DNS is the likely cause.'' We could formalize that if needed, but likely the agent just communicates it.
+
+Step 3 (Agent output to user): ``It looks like a DNS issue. The domain name isn't resolving. Try changing your DNS server.'' Here it uses the knowledge it acquired.
+
+The knowledge log at the end: $\Sigma = {
+\neg \text{Reachable}_{\text{user}}(\text{example.com}), \text{DNSFail}(\text{example.com})}$. If later the user says ``Actually, I can reach sites by IP but not by name,'' that's consistent with the agent's knowledge (further confirming DNS problem, which was already the hypothesis).
+
+Now, throughout this, the system could ensure the agent doesn't contradict itself. For example, the agent wouldn't say ``Maybe your internet cable is unplugged'' if it already concluded the ping reached the host (in our scenario ping didn't reach due to host not found, but a different scenario could yield contradictory leads).
+
+This example shows how tool results feed epistemic updates. Each tool's answer is effectively a sensor reading that the agent adds to its knowledge state. In classical programming, one would just store it in a variable. The difference here is that by storing in $\Sigma$ and designing the logic around it, we can use logical inference (like eliminating possibilities, or triggering certain actions when something is known or unknown).
+
+Listing~\ref{lst:diagnose-loop} demonstrates a small Python driver that applies the knowledge base to the connectivity scenario.
+
+\lstinputlisting[language=Python, caption={Toy diagnostic loop that turns tool feedback into announcements.}, label={lst:diagnose-loop}]{code/pipeline_loop.py}
